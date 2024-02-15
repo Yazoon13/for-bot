@@ -1,0 +1,132 @@
+local LocalPlayer = game.Players.LocalPlayer
+
+repeat wait() until game:IsLoaded()
+
+local StarterGui = game:GetService("StarterGui")
+StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+
+
+local MainUI = script.Parent
+local TimerText = MainUI.RoundImageLabel.TimerText
+
+local PlacementFrame = script.Parent.Places
+
+local Timer = game.ReplicatedStorage.Values.Time
+
+local GameState = game.ReplicatedStorage.Values.GameState
+
+
+--Helper Functions:
+
+function Format(Int)
+	return string.format("%02i", Int)
+end
+
+function convertToHMS(Seconds)
+	local Minutes = (Seconds - Seconds%60)/60
+	Seconds = Seconds - Minutes*60
+	local Hours = (Minutes - Minutes%60)/60
+	Minutes = Minutes - Hours*60
+	return Format(Minutes)..":"..Format(Seconds)
+end
+
+function GetMapArea()
+	local Radius = workspace.Base.Base.Size.Z / 2
+	local Area = math.pi * Radius^2
+	
+	return Area
+end
+
+function GetPlayerArea(Player)
+	local PlayerArea = workspace.Area[Player.Name.."Area"]:GetChildren()
+	local TotalArea = 0
+	
+	for _, Part in pairs(PlayerArea)do
+		local PartArea = Part.Size.X * Part.Size.Z
+		TotalArea += PartArea
+	end
+	
+	return tonumber(string.format("%.2f", TotalArea / GetMapArea() * 100))
+end
+
+function MakeAreaTable()
+	local AreaTable = {}
+	
+	for _,Plr in pairs(game.Players:GetPlayers())do
+		if Plr.Team == game.Teams.Players then
+			AreaTable[#AreaTable + 1] = {Plr.Name, Plr:GetAttribute("Area")} --GetPlayerArea(Plr)
+		end
+	end
+	
+	table.sort(AreaTable, function(a, b)
+		return a[2] > b[2]
+	end)
+	
+	local Placement = 0
+	local YourPlacement = function()
+		for Index = 1, #AreaTable do
+			local Name = AreaTable[Index][1]
+			local Area = AreaTable[Index][2]
+			
+			if Name == LocalPlayer.Name then
+				return {Index, Area}
+			end
+		end
+	end
+	
+	local FirstPlace = nil
+	local SecondPlace = nil
+	local ThirdPlace = nil
+	
+	for Index = 1, #AreaTable do
+		local Name = AreaTable[Index][1]
+		local Area = AreaTable[Index][2]
+
+		if Index == 1 then
+			FirstPlace = {Name, Area}
+		elseif Index == 2 then
+			SecondPlace = {Name, Area}
+		elseif Index == 3 then
+			ThirdPlace = {Name, Area}
+		end
+	end 
+		
+	if FirstPlace then
+		PlacementFrame["1"].MapPercentage.Text = FirstPlace[2].." %"
+		PlacementFrame["1"].Username.Text = FirstPlace[1]
+	end
+	if SecondPlace then
+		PlacementFrame["2"].MapPercentage.Text = SecondPlace[2].." %"
+		PlacementFrame["2"].Username.Text = SecondPlace[1]
+	end
+	if ThirdPlace then
+		PlacementFrame["3"].MapPercentage.Text = ThirdPlace[2].." %"
+		PlacementFrame["3"].Username.Text = ThirdPlace[1]
+	end
+
+
+	
+	if LocalPlayer.Team == game.Teams.Players then
+		PlacementFrame.You.Visible = true
+		PlacementFrame.You.Username.Text = LocalPlayer.Name
+		PlacementFrame.You.MapPercentage.Text = YourPlacement()[2].." %"
+		PlacementFrame.You.Place.Text = YourPlacement()[1]
+	else
+		PlacementFrame.You.Visible = false
+	end
+end
+
+TimerText.Text = convertToHMS(Timer.Value)
+MainUI.GameStateLabel.Text = GameState.Value.." In Progress" 
+
+GameState.Changed:Connect(function()
+	MainUI.GameStateLabel.Text = GameState.Value.." In Progress" 
+end)
+
+Timer.Changed:Connect(function()
+	TimerText.Text = convertToHMS(Timer.Value)
+	
+	if GameState.Value == "Round" and LocalPlayer.Team == game.Teams.Players then
+		MakeAreaTable()
+	end
+end)
