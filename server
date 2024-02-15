@@ -1,0 +1,114 @@
+local MPS = game:GetService("MarketplaceService")
+local DataManager = require(game.ReplicatedStorage.Modules.Data.DataManager)
+local DataInfo = require(game.ReplicatedStorage.Modules.Data.DataInfo)
+local InventoryManager = require(game.ReplicatedStorage.Modules.Data.InventoryHandler)
+
+local RemotesFolder = game.ReplicatedStorage.RemoteEvents
+
+local Gamepasses = {
+	[267173200] = function(Player)
+		--Impostor Skin Gamepass
+		InventoryManager:AddItem(Player, "Imposter","Skins", 267173200)
+	end,
+	[267170814] = function(Player)
+		--Luffy Skin Gamepass
+		InventoryManager:AddItem(Player, "Luffy","Skins", 267173200)
+	end,
+}
+
+local Products = {
+	[1741880188] = function(Player) --Unlock All Gifts
+		Player:SetAttribute("TimeJoined", 0)
+		Player.PlayerGui.LeftSide.Gifts.MainFrame.UnlockAll.TextLabel.Text = "Already Unlocked All"
+	end,
+	[1661555930] = function(Player) --Map 100x
+		local PlrData = DataManager:GetPlayerData(Player)
+		table.insert(PlrData.DevProducts, "Map100")
+		Player:SetAttribute("Map100", true)
+	end,
+	[1661555268] = function(Player) --Speed 2x
+		local PlrData = DataManager:GetPlayerData(Player)
+		table.insert(PlrData.DevProducts, "Speed2x")
+		Player:SetAttribute("Speed2x", true)
+	end,
+	[1661554649] = function(Player) --Kill All
+		local PlrData = DataManager:GetPlayerData(Player)
+		table.insert(PlrData.DevProducts, "KillAll")
+		Player:SetAttribute("KillAll", true)
+	end,
+	[1661559371] = function(Player) --Start 5x Bigger
+		local PlrData = DataManager:GetPlayerData(Player)
+		table.insert(PlrData.DevProducts, "Start5x")
+		Player:SetAttribute("Start5x", true)
+	end,
+	[1661555605] = function(Player) --Revenge Kill
+		local PlayerToRevengeOn = game.Players:FindFirstChild(Player:GetAttribute("Killer"))
+		
+		if PlayerToRevengeOn then
+			if PlayerToRevengeOn.Team == game.Teams.Players then
+				game.ReplicatedStorage.RemoteEvents.RevengeKillPlayer:Fire(Player, PlayerToRevengeOn)
+			end
+		end
+	end,
+	[1661554285] = function(Player) --Revive
+		game.ReplicatedStorage.RemoteEvents.RevivePlayer:Fire(Player)
+	end,
+}
+
+
+MPS.PromptGamePassPurchaseFinished:Connect(function(Player, PassId, Purchased)
+	if Purchased then
+		Gamepasses[PassId](Player)
+	end
+end)
+
+
+game.Players.PlayerAdded:Connect(function(Plr)
+	local InventoryFolder = Plr:WaitForChild("InventoryFolder")
+	for ID, PassFunction in pairs(Gamepasses)do
+		local PlrData = DataManager:GetPlayerData(Plr)
+		
+		if MPS:UserOwnsGamePassAsync(Plr.UserId, ID) and not table.find(PlrData.GamePasses, ID) then
+			local Success, Result = pcall(PassFunction, Plr)
+		end
+	end
+end)
+
+local function processReceipt(ReceiptInfo)
+	local UserId = ReceiptInfo.PlayerId
+	local ProductId = ReceiptInfo.ProductId
+	local Player = game.Players:GetPlayerByUserId(UserId)
+
+	if Player then
+		local ProductHandler = nil
+		local PlrData = DataManager:GetPlayerData(Player)
+
+		if Products[ProductId]then
+			ProductHandler = Products[ProductId]--(Player)
+		else
+			ProductHandler = function()
+				for Name, Table in pairs(DataInfo.Shop)do
+					if typeof(Table) == "table" and Table.Id == ProductId then
+						local AddTo, AddBonus = Table.Info[1], Table.Info[2]
+
+						PlrData[AddTo] += AddBonus
+						Player.CurrenciesFolder:FindFirstChild(AddTo, true).Value += AddBonus
+					end
+				end
+			end
+		end
+		
+		local Success, Result = pcall(ProductHandler, Player)
+
+		if Success then
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		else
+			warn("Failed to process receipt:", ReceiptInfo, Result)
+		end
+	end
+
+	return Enum.ProductPurchaseDecision.NotProcessedYet
+end
+
+
+MPS.ProcessReceipt = processReceipt
